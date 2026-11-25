@@ -17,11 +17,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Show Android SDK
+      - name: Download pinned URnetwork Android SDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls "$ANDROID_HOME/platforms"
-          ls "$ANDROID_HOME/build-tools"
+          mkdir -p app/libs
+          curl --fail --location --retry 3 \
+            "https://github.com/urnetwork/build/releases/download/v2026.10.27-1083160450/URnetworkSdk-2026.10.27-1083160450.aar" \
+            --output app/libs/URnetworkSdk.aar
+          test -s app/libs/URnetworkSdk.aar
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - name: Upload APK
