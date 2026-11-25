@@ -113,6 +113,18 @@ private fun FreeFlowScreen() {
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text("اتصال") }
                             }
+                            OutlinedButton(
+                                onClick = {
+                                    val report = VpnDiagnostics.buildReport(context)
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_SUBJECT, "FreeFlowVPN diagnostic report")
+                                        putExtra(Intent.EXTRA_TEXT, report)
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "ارسال گزارش مشکل"))
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("گزارش مشکل و اشتراک‌گذاری") }
                         }
                     }
                 }
