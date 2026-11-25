@@ -202,6 +202,14 @@ class UrNetworkVpnService : VpnService() {
 
     override fun onDestroy() {
         stopTunnel(updateState = false)
+
+        // Do not leave a persistent "connected" flag after Android destroys the service.
+        // Preserve a terminal error written by the IoLoop callback or startup failure.
+        val currentState = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(STATE_KEY, "disconnected")
+        if (currentState == "connecting" || currentState == "connected") {
+            setState("disconnected", "سرویس VPN اندروید متوقف شد.")
+        }
         super.onDestroy()
     }
 
