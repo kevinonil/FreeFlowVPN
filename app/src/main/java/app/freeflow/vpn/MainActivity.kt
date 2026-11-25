@@ -1,5 +1,6 @@
 package app.freeflow.vpn
 
+import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
@@ -51,7 +52,7 @@ private fun FreeFlowScreen() {
         if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == ComponentActivity.RESULT_OK) startVpn()
+        if (result.resultCode == Activity.RESULT_OK) startVpn()
         else message = "مجوز VPN داده نشد."
     }
 
