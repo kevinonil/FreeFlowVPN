@@ -116,8 +116,9 @@ class UrNetworkVpnService : VpnService() {
             val loop = Sdk.newIoLoop(localDevice, detachedFd) {
                 mainHandler.post {
                     if (!stopping) {
-                        setState("disconnected", "تونل توسط موتور شبکه بسته شد.")
+                        // Preserve the terminal reason for the UI instead of clearing it during cleanup.
                         stopTunnel()
+                        setState("error", "تونل توسط موتور شبکه بسته شد؛ اتصال پیش از تکمیل متوقف شد.")
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelf()
                     }
@@ -131,12 +132,14 @@ class UrNetworkVpnService : VpnService() {
                 stopTunnel()
             }
         } catch (error: Exception) {
-            setState("error", error.message ?: "خطای ناشناخته در اتصال.")
+            val reason = error.message ?: error.javaClass.simpleName.ifBlank { "خطای ناشناخته در اتصال." }
+            stopTunnel()
+            // Cleanup resets the normal state, so persist the failure after cleanup.
+            setState("error", reason)
             mainHandler.post {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
-            stopTunnel()
         }
     }
 
