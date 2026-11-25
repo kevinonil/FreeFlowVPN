@@ -9,6 +9,8 @@ import android.net.VpnService
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.system.Os
+import android.system.OsConstants
 import com.bringyour.sdk.ConnectLocation
 import com.bringyour.sdk.ConnectLocationId
 import com.bringyour.sdk.DeviceLocal
@@ -36,10 +38,12 @@ class UrNetworkVpnService : VpnService() {
     private var closeIoLoop: (() -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var stopping = false
+    @Volatile private var startInProgress = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        VpnDiagnostics.log(this, "service_created", "Android " + Build.VERSION.SDK_INT)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -50,9 +54,15 @@ class UrNetworkVpnService : VpnService() {
                 stopSelf()
             }
             ACTION_START -> {
+                if (startInProgress || getSharedPreferences(PREFS, MODE_PRIVATE).getString(STATE_KEY, "disconnected") == "connected") {
+                    VpnDiagnostics.log(this, "start_ignored", "Connection attempt already active")
+                    return START_NOT_STICKY
+                }
                 stopping = false
+                startInProgress = true
                 startForeground(NOTIFICATION_ID, notification("در حال آماده‌سازی اتصال…"))
                 setState("connecting")
+                VpnDiagnostics.log(this, "start_requested")
                 Thread({ startTunnel() }, "FreeFlow-URnetwork").start()
             }
             else -> stopSelf()
@@ -61,9 +71,19 @@ class UrNetworkVpnService : VpnService() {
     }
 
     private fun startTunnel() {
+        var stage = "load_account"
         try {
             val jwt = SecureStore(this).get("ur_jwt")
                 ?: throw IllegalStateException("ابتدا حساب URnetwork را ایجاد کنید.")
+            stage = "check_network"
+            val cm = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val active = cm.activeNetwork
+            val caps = active?.let { cm.getNetworkCapabilities(it) }
+            val hasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            val validated = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+            VpnDiagnostics.log(this, stage, "internet=" + hasInternet + " validated=" + validated)
+            if (!hasInternet) throw IllegalStateException("اتصال اینترنت گوشی در دسترس نیست.")
+            stage = "sdk_manager"
             val prefs = getSharedPreferences("installation", MODE_PRIVATE)
             val instanceId = prefs.getString("ur_instance_id", null) ?: Sdk.newId().toString().also {
                 prefs.edit().putString("ur_instance_id", it).apply()
@@ -71,24 +91,29 @@ class UrNetworkVpnService : VpnService() {
 
             val networkManager = Sdk.newNetworkSpaceManager(filesDir.absolutePath)
             manager = networkManager
+            VpnDiagnostics.log(this, stage, "NetworkSpaceManager created")
             val key = Sdk.newNetworkSpaceKey("ur.network", "main")
             val space = networkManager.updateNetworkSpace(key) {
                 it.migrationHostName = "bringyour.com"
             }
             space.api.setByJwt(jwt)
+            VpnDiagnostics.log(this, "network_space", "Production space configured")
+            stage = "create_device"
 
             val localDevice = Sdk.newDeviceLocalWithMemoryTarget(
                 space,
                 jwt,
                 "FreeFlowVPN Android",
                 Build.MODEL ?: "Android",
-                "0.2.0",
+                "0.3.0",
                 Sdk.parseId(instanceId),
                 false,
                 null,
                 96L * 1024L * 1024L
             )
             device = localDevice
+            VpnDiagnostics.log(this, stage, "DeviceLocal created")
+            stage = "configure_device"
 
             // Fail closed: if the SDK tunnel goes away, do not silently route traffic locally.
             localDevice.setRouteLocal(false)
@@ -98,6 +123,7 @@ class UrNetworkVpnService : VpnService() {
                 }
             )
 
+            stage = "establish_tun"
             val builder = Builder()
                 .setSession("FreeFlowVPN • URnetwork")
                 .setMtu(1440)
@@ -109,10 +135,18 @@ class UrNetworkVpnService : VpnService() {
                 .addDnsServer("2606:4700:4700::1111")
 
             // Keep the app's own control-plane traffic outside its TUN to prevent a routing loop.
-            try { builder.addDisallowedApplication(packageName) } catch (_: Exception) { }
+            builder.addDisallowedApplication(packageName)
 
-            val tun = builder.establish() ?: throw IllegalStateException("Android اجازه ساخت تونل VPN را نداد.")
+            val tun = builder.establish() ?: throw IllegalStateException("Android نتوانست رابط VPN (TUN) را ایجاد کند.")
+            VpnDiagnostics.log(this, stage, "TUN established; MTU=1440; IPv4+IPv6 routes")
+            stage = "configure_tun_fd"
+            // URnetwork SDK documentation requires a non-blocking descriptor.
+            val fdFlags = Os.fcntlInt(tun.fileDescriptor, OsConstants.F_GETFL, 0)
+            Os.fcntlInt(tun.fileDescriptor, OsConstants.F_SETFL, fdFlags or OsConstants.O_NONBLOCK)
+            VpnDiagnostics.log(this, stage, "TUN descriptor set to O_NONBLOCK")
+            stage = "start_io_loop"
             val detachedFd = tun.detachFd()
+            VpnDiagnostics.log(this, stage, "TUN fd detached and transferred to SDK")
             val loop = Sdk.newIoLoop(localDevice, detachedFd) {
                 mainHandler.post {
                     if (!stopping) {
@@ -125,15 +159,19 @@ class UrNetworkVpnService : VpnService() {
                 }
             }
             closeIoLoop = { loop.close() }
+            startInProgress = false
+            VpnDiagnostics.log(this, "io_loop_started", "SDK IoLoop created successfully")
             if (!stopping) {
-                setState("connected")
-                mainHandler.post { updateNotification("متصل به URnetwork") }
+                setState("connected", "تونل سیستم ساخته شد؛ مسیر اینترنت هنوز با ترافیک واقعی تأیید نشده است.")
+                mainHandler.post { updateNotification("تونل فعال • URnetwork") }
             } else {
                 stopTunnel()
             }
-        } catch (error: Exception) {
-            val reason = error.message ?: error.javaClass.simpleName.ifBlank { "خطای ناشناخته در اتصال." }
+        } catch (error: Throwable) {
+            VpnDiagnostics.logError(this, "failure_at_" + stage, error)
+            val reason = error.message ?: error.javaClass.name
             stopTunnel()
+            startInProgress = false
             // Cleanup resets the normal state, so persist the failure after cleanup.
             setState("error", reason)
             mainHandler.post {
@@ -145,6 +183,7 @@ class UrNetworkVpnService : VpnService() {
 
     private fun stopTunnel() {
         stopping = true
+        startInProgress = false
         try { closeIoLoop?.invoke() } catch (_: Exception) { }
         closeIoLoop = null
         try { device?.close() } catch (_: Exception) { }
@@ -171,6 +210,7 @@ class UrNetworkVpnService : VpnService() {
             .putString(STATE_KEY, state)
             .putString(ERROR_KEY, error)
             .apply()
+        VpnDiagnostics.log(this, "state", state + " " + error.take(250))
     }
 
     private fun createNotificationChannel() {
