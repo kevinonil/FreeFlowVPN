@@ -35,7 +35,7 @@ object VpnDiagnostics {
     private fun redactSecrets(value: String): String {
         // Handle both key=value logs and JSON-like key: "value" fragments.
         val secretPattern = Regex(
-            """(?i)(["']?(?:by_jwt|jwt|token|seedphrase|recovery_phrase|recovery|password|authorization)["']?\\s*[:=]\\s*["']?)[^"'\\s,;}]+"""
+            """(?i)(["']?(?:by_jwt|jwt|token|seedphrase|recovery_phrase|recovery|password|authorization)["']?\s*[:=]\s*["']?)[^"'\s,;}]+"""
         )
         return secretPattern.replace(value) { match ->
             match.groupValues[1] + "[REDACTED]"
