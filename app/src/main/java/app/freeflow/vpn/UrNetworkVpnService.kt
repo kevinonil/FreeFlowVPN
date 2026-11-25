@@ -181,7 +181,7 @@ class UrNetworkVpnService : VpnService() {
         }
     }
 
-    private fun stopTunnel() {
+    private fun stopTunnel(updateState: Boolean = true) {
         stopping = true
         startInProgress = false
         try { closeIoLoop?.invoke() } catch (_: Exception) { }
@@ -190,7 +190,7 @@ class UrNetworkVpnService : VpnService() {
         device = null
         try { manager?.close() } catch (_: Exception) { }
         manager = null
-        setState("disconnected")
+        if (updateState) setState("disconnected")
     }
 
     override fun onRevoke() {
@@ -201,7 +201,7 @@ class UrNetworkVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        stopTunnel()
+        stopTunnel(updateState = false)
         super.onDestroy()
     }
 
