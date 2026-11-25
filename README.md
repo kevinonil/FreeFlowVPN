@@ -17,3 +17,8 @@ Install JDK 17, Android SDK (API 35), and Gradle 8.9, then run:
 APK output:
 
     app/build/outputs/apk/debug/app-debug.apk
+
+
+## Engine integration audit
+
+The provider catalogue is not a list of active VPN connections. See [docs/ENGINE_INTEGRATION_AUDIT.md](docs/ENGINE_INTEGRATION_AUDIT.md) for the verified Android SDK/source paths, constraints, and acceptance checklist. URnetwork is the first integration target; the other providers must not be shown as connected until an official integration path has been verified and tested.
