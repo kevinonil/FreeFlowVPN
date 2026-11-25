@@ -82,7 +82,7 @@ class UrNetworkVpnService : VpnService() {
                 jwt,
                 "FreeFlowVPN Android",
                 Build.MODEL ?: "Android",
-                BuildConfig.VERSION_NAME,
+                "0.2.0",
                 Sdk.parseId(instanceId),
                 false,
                 null,
