@@ -104,7 +104,7 @@ class UrNetworkVpnService : VpnService() {
                 .addAddress("10.64.0.2", 32)
                 .addRoute("0.0.0.0", 0)
                 .addDnsServer("1.1.1.1")
-                .addAddress("fd00:free:flow::2", 128)
+                .addAddress("fd00:6466:6c6f:77::2", 128)
                 .addRoute("::", 0)
                 .addDnsServer("2606:4700:4700::1111")
 
