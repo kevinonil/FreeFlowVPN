@@ -14,7 +14,7 @@ This audit distinguishes a real embeddable integration from a provider's standal
 
 | Provider | Public Android integration path | Requirements / limitations | Decision |
 |---|---|---|---|
-| URnetwork | Official Android AAR SDK, package com.bringyour.sdk. | Uses URnetwork-hosted platform and an individual account JWT. Free plan has a daily data allowance; traffic stops when allowance is exhausted. Android VpnService and tunnel FD lifecycle remain the app's responsibility. SDK is MPL-2.0. | First integration target |
+| URnetwork | Official Android AAR SDK, package com.bringyour.sdk. | Uses URnetwork-hosted platform and an individual account JWT. Free plan has a daily data allowance; traffic stops when allowance is exhausted. Android VpnService and tunnel FD lifecycle remain the app's responsibility. SDK is MPL-2.0. | Implemented in app source; real-device verification pending |
 | Lantern | Lantern Android library documentation describes liblantern.aar and sdk-debug.aar. | Must verify current release, supported API surface, licensing and Android compatibility before shipping. | Candidate; compatibility audit required |
 | Geph | Official Android client source is public. | No separate, stable third-party Android embedding SDK has been confirmed in the reviewed docs. Reusing app internals needs license and maintenance review. | Do not label as integrated |
 | Tor | Tor-Android library is explicitly described as embeddable; Orbot also uses IPtProxy transports. | Tor is a distinct anonymity network and has different performance/usage characteristics; it is not interchangeable with a conventional VPN provider. | Candidate after library/license audit |
@@ -25,7 +25,7 @@ This audit distinguishes a real embeddable integration from a provider's standal
 
 ## Implementation order
 
-1. URnetwork: integrate the official AAR, per-user account flow, Android VPN permission/service lifecycle, disconnect/recovery, quota/error states, and traffic verification.
+1. URnetwork: code is integrated (official AAR, per-user instant-account flow, Android VPN permission/service lifecycle, disconnect/recovery, and fail-closed routing). Real-device traffic, quota/error presentation, and leak testing remain to be verified.
 2. Tor: audit and integrate the official Tor-Android library if the supported API and license fit.
 3. Lantern: verify current AAR and SDK contract, then integrate only if still maintained and permitted.
 4. Geph and Psiphon: investigate upstream-supported embedding contracts and licenses before adapting client code.
