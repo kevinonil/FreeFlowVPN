@@ -23,14 +23,22 @@ object VpnDiagnostics {
 
     fun log(context: Context, stage: String, detail: String = "") {
         val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
-        val safe = detail.replace(
-            Regex("(?i)(jwt|token|seedphrase|recovery|password)=?[^\\s,;]*")
-        ) { match -> match.groupValues[1] + "=[REDACTED]" }.take(700)
+        val safe = redactSecrets(detail).take(700)
         synchronized(lock) {
             val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val old = prefs.getString(KEY_EVENTS, "").orEmpty()
             val next = (old + "\n" + "$stamp | $stage | $safe").takeLast(MAX_CHARS)
             prefs.edit().putString(KEY_EVENTS, next).apply()
+        }
+    }
+
+    private fun redactSecrets(value: String): String {
+        // Handle both key=value logs and JSON-like key: "value" fragments.
+        val secretPattern = Regex(
+            """(?i)(["']?(?:by_jwt|jwt|token|seedphrase|recovery_phrase|recovery|password|authorization)["']?\\s*[:=]\\s*["']?)[^"'\\s,;}]+"""
+        )
+        return secretPattern.replace(value) { match ->
+            match.groupValues[1] + "[REDACTED]"
         }
     }
 
@@ -66,7 +74,7 @@ object VpnDiagnostics {
             appendLine("Internet capability: ${caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true}")
             appendLine("Validated network: ${caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true}")
             appendLine("Current app state: ${statePrefs.getString("state", "unknown")}")
-            appendLine("Last app error: ${statePrefs.getString("error", "").orEmpty().ifBlank { "(none)" }}")
+            appendLine("Last app error: ${redactSecrets(statePrefs.getString("error", "").orEmpty()).ifBlank { "(none)" }}")
             appendLine()
             appendLine("Recent diagnostic events (newest at bottom):")
             appendLine(events.ifBlank { "(no events recorded)" })
